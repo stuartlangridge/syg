@@ -2,6 +2,7 @@ import unittest
 import syg
 import requests_mock
 import json
+import base64
 
 class TestCommandLine(unittest.TestCase):
     def test_no_url(self):
@@ -45,7 +46,7 @@ class TestBasicHandler(unittest.TestCase):
             "tree": []
         }))
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
 
     def test_called_both(self, m):
         output = self.basic_request(m)
@@ -116,7 +117,7 @@ class TestPythonHandler(unittest.TestCase):
         }))
 
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
 
     def test_parts_name_python(self, m):
         output = self.basic_request(m)
@@ -138,7 +139,7 @@ class TestPythonHandler(unittest.TestCase):
         }))
 
         output = syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
         self.assertEqual(output["parts"][self.NAME].get("python-version"), None)
 
 @requests_mock.mock()
@@ -157,7 +158,7 @@ class TestCmakeHandler(unittest.TestCase):
         }))
 
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
 
     def test_parts_name_cmake(self, m):
         output = self.basic_request(m)
@@ -183,7 +184,7 @@ class TestCmakeHandler(unittest.TestCase):
         }))
 
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
 
     def test_parts_name_qmake(self, m):
         output = self.basic_request(m)
@@ -193,7 +194,6 @@ class TestCmakeHandler(unittest.TestCase):
         self.assertEqual(output["apps"][self.NAME]["plugs"], 
             ["network", "network-bind", "unity7", "opengl"])
 
-@unittest.skip("we can't read files from the repo yet")
 @requests_mock.mock()
 class TestDebianHandler(unittest.TestCase):
     NAME = "dunno"
@@ -206,11 +206,36 @@ class TestDebianHandler(unittest.TestCase):
             "clone_url": self.CLONE_URL
         }))
         m.get("internal://trees/strange", text=json.dumps({
-            "tree": [{"path": "readme.txt"}, {"path": "debian/control"}]
+            "tree": [
+                {"path": "readme.txt", "type": "blob"}, 
+                {"path": "debian", "url": "internal://trees/strange/debian", "type": "tree"}
+            ]
+        }))
+        m.get("internal://trees/strange/debian", text=json.dumps({
+            "tree": [
+                {"path": "subreadme.txt", "type": "blob"}, 
+                {"path": "control", "url": "internal://trees/strange/debian/control", "type": "blob"}
+            ]
         }))
 
+        ctrl_file_content = ("Package: com.example.package\n"
+                "Name: Example Package\nBuild-Depends: pies (>=2.3), lard\n"
+                "Conflicts: com.example.legacy")
+        as_b64 = base64.b64encode(ctrl_file_content.encode("utf-8"))
+        as_json = json.dumps({"content": as_b64.decode("utf-8")})
+        m.get("https://api.github.com/repos/madeup1/madeup2/contents/debian/control", 
+            text=as_json)
+
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
-            "https://github.com/madeup1/madeup2")
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
+
+    def test_called_four(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(m.call_count, 4)
+
+    def test_build_packages(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(output["parts"][self.NAME]["build-packages"], ["pies", "lard"])
 
 class TestSerialiser(unittest.TestCase):
     def test_basic(self):
@@ -218,6 +243,42 @@ class TestSerialiser(unittest.TestCase):
             syg.serialise({"name": "myname", "pies": "many"}),
             "name: myname\npies: many\n"
             )
+
+@requests_mock.mock()
+class TestTreeGetter(unittest.TestCase):
+    def basic_request(self, m):
+        m.get("internal://trees/strange/subdir", text=json.dumps({
+            "tree": [{"path": "subsubdir", "url": "internal://trees/strange/subdir/subsubdir", "type": "tree"}]
+        }))
+        m.get("internal://trees/strange/subdir/subsubdir", text=json.dumps({
+            "tree": [{"path": "pies", "url": "internal://trees/strange/subdir/subsubdir/pies", "type": "blob"}]
+        }))
+        initial_trees = {
+            "tree": [{"path": "subdir", "url": "internal://trees/strange/subdir", "type": "tree"}]
+        }
+        tg = syg.get_tree_getter(initial_trees)
+        result = tg(["subdir", "subsubdir"])
+        return result
+
+    def test_called_three(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(m.call_count, 2)
+    def test_output_count(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(len(output), 1)
+    def test_output_path(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(output[0], "pies")
+
+@requests_mock.mock()
+class TestFileGetter(unittest.TestCase):
+    def test_simple(self, m):
+        m.get("https://api.github.com/repos/mrtest/myrepo/contents/fname", text=json.dumps({
+            "content": base64.b64encode("ahaha".encode("utf-8")).decode("utf-8")
+        }))
+        tg = syg.get_file_getter("internal://base/repos/mrtest/myrepo", {}, "mrtest", "myrepo")
+        result = tg("fname")
+        self.assertEqual(result, b"ahaha")
 
 if __name__ == '__main__':
     unittest.main()
