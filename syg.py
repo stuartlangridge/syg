@@ -63,6 +63,16 @@ def HandlerQmake(snap, repo, filenames, tree_getter, file_getter):
     }
     snap["apps"][snap["name"]]["plugs"] = ["network", "network-bind", "unity7", "opengl"]
 
+def HandlerMake(snap, repo, filenames, tree_getter, file_getter):
+    if not snap.get("parts"): return
+    if "Makefile" not in filenames: return
+    snap["parts"][snap["name"]] = {"plugin": "make"}
+
+def HandlerAutotools(snap, repo, filenames, tree_getter, file_getter):
+    if not snap.get("parts"): return
+    if "configure.ac" not in filenames: return
+    snap["parts"][snap["name"]] = {"plugin": "autotools"}
+
 def HandlerDebian(snap, repo, filenames, tree_getter, file_getter):
     if not snap.get("parts"): return
     if "debian" not in filenames: return
@@ -162,6 +172,8 @@ HANDLERS = [
     HandlerPython,
     HandlerCmake,
     HandlerQmake,
+    HandlerMake,
+    HandlerAutotools,
     HandlerDebian
 ]
 

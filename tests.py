@@ -172,6 +172,46 @@ class TestCmakeHandler(unittest.TestCase):
             ["network", "network-bind", "unity7", "opengl"])
 
 @requests_mock.mock()
+class TestMakeHandler(unittest.TestCase):
+    NAME = "dunno"
+    def basic_request(self, m):
+        m.get("https://api.github.com/repos/madeup1/madeup2", text=json.dumps({
+            "name": self.NAME,
+            "trees_url": "internal://trees{/sha}",
+            "default_branch": "strange"
+        }))
+        m.get("internal://trees/strange", text=json.dumps({
+            "tree": [{"path": "readme.txt"}, {"path": "Makefile"}]
+        }))
+
+        return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
+
+    def test_parts_name_mmake(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(output["parts"][self.NAME]["plugin"], "make")
+
+@requests_mock.mock()
+class TestAutotoolsHandler(unittest.TestCase):
+    NAME = "dunno"
+    def basic_request(self, m):
+        m.get("https://api.github.com/repos/madeup1/madeup2", text=json.dumps({
+            "name": self.NAME,
+            "trees_url": "internal://trees{/sha}",
+            "default_branch": "strange"
+        }))
+        m.get("internal://trees/strange", text=json.dumps({
+            "tree": [{"path": "readme.txt"}, {"path": "configure.ac"}]
+        }))
+
+        return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
+            "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
+
+    def test_parts_name_mmake(self, m):
+        output = self.basic_request(m)
+        self.assertEqual(output["parts"][self.NAME]["plugin"], "autotools")
+
+@requests_mock.mock()
 class TestCmakeHandler(unittest.TestCase):
     NAME = "dunno"
     CLONE_URL = "haha://its-the-clone-url"
