@@ -11,6 +11,7 @@ def HandlerBasic(snap, repo, filenames, tree_getter, file_getter):
     # Basic info, read from repo
     snap["name"] = repo.get("name", "(couldn't identify name)")
     snap["summary"] = repo.get("description", "(couldn't identify description)")
+    snap["description"] = ""
 
     # hardcoded basic info
     snap["grade"] = "stable"
