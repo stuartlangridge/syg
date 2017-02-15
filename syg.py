@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import sys, requests, yaml
+import sys, requests, yaml, collections
 
 #######################################################################
 # Handlers
@@ -62,6 +62,10 @@ class SygException(Exception): pass
 class SygSyntaxException(SygException): pass
 
 def serialise(snap):
+    # http://stackoverflow.com/a/8661021
+    # http://stackoverflow.com/questions/9951852/pyyaml-dumping-things-backwards#comment26471464_17310199
+    represent_dict_order = lambda self, data:  self.represent_mapping('tag:yaml.org,2002:map', data.items())
+    yaml.SafeDumper.add_representer(collections.OrderedDict, represent_dict_order)
     return yaml.safe_dump(snap, default_flow_style=False)
 
 def process_repo(apiurl, repourl):
@@ -77,7 +81,7 @@ def process_repo(apiurl, repourl):
     trees = r.json()
     filenames = [x["path"] for x in trees.get("tree", [])]
 
-    snap = {}
+    snap = collections.OrderedDict()
     for h in HANDLERS:
         h(snap, repo, filenames)
     return snap
