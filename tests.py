@@ -40,22 +40,25 @@ class TestBasicHandler(unittest.TestCase):
             "name": self.NAME,
             "trees_url": "internal://trees{/sha}",
             "default_branch": "strange",
-            "description": self.SUMMARY
+            "description": self.SUMMARY,
+            "releases_url": "internal://releases{/id}"
         }))
         m.get("internal://trees/strange", text=json.dumps({
             "tree": []
+        }))
+        m.get("internal://releases/latest", text=json.dumps({
+            "tag_name": self.VERSION
         }))
         return syg.process_repo("https://api.github.com/repos/madeup1/madeup2",
             "https://github.com/madeup1/madeup2", "madeup1", "madeup2")
 
     def test_called_both(self, m):
         output = self.basic_request(m)
-        self.assertEqual(m.call_count, 2)
+        self.assertEqual(m.call_count, 3)
 
     def test_name(self, m):
         output = self.basic_request(m)
         self.assertEqual(output.get("name"), self.NAME)
-    @unittest.skip("haven't done versions yet")
     def test_version(self, m):
         output = self.basic_request(m)
         self.assertEqual(output.get("version"), self.VERSION)

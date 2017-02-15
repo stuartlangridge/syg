@@ -29,6 +29,14 @@ def HandlerBasic(snap, repo, filenames, tree_getter, file_getter):
             "source-type": "git"
         }
 
+    if "releases_url" in repo:
+        latest_release_url = repo["releases_url"].replace("{/id}", "/latest")
+        r = requests.get(latest_release_url)
+        out = r.json()
+        snap["version"] = out.get("tag_name", "0")
+    else:
+        snap["version"] = "0"
+
 def HandlerPython(snap, repo, filenames, tree_getter, file_getter):
     if not snap.get("parts"): return
     if "requirements.txt" not in filenames: return
